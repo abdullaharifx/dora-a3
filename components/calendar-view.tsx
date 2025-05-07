@@ -24,7 +24,7 @@ import {
   isToday,
   isSameDay,
 } from "date-fns"
-import { utcToZonedTime } from "date-fns-tz"
+import { toZonedTime } from "date-fns-tz"
 
 interface CalendarViewProps {
   timeZone: string
@@ -49,7 +49,7 @@ export default function CalendarView({ timeZone }: CalendarViewProps) {
 
   // Calculate date range based on current view
   const getDateRange = () => {
-    const zonedDate = utcToZonedTime(currentDate, timeZone)
+    const zonedDate = toZonedTime(currentDate, timeZone)
 
     switch (view) {
       case "day":
@@ -142,14 +142,14 @@ export default function CalendarView({ timeZone }: CalendarViewProps) {
   const getEventsForDay = (day: Date) => {
     return events.filter((event) => {
       const eventStart = new Date(event.start.dateTime)
-      return isSameDay(utcToZonedTime(eventStart, timeZone), day)
+      return isSameDay(toZonedTime(eventStart, timeZone), day)
     })
   }
 
   // Filter events for a specific hour
   const getEventsForHour = (day: Date, hour: number) => {
     return events.filter((event) => {
-      const eventStart = utcToZonedTime(new Date(event.start.dateTime), timeZone)
+      const eventStart = toZonedTime(new Date(event.start.dateTime), timeZone)
       return isSameDay(eventStart, day) && eventStart.getHours() === hour
     })
   }

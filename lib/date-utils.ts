@@ -1,10 +1,9 @@
 import { addDays, addWeeks, addMonths, parseISO, isValid, isBefore, addHours } from "date-fns"
-import { utcToZonedTime, zonedTimeToUtc } from "date-fns-tz"
-
+import {toZonedTime, fromZonedTime } from "date-fns-tz"
 // Format date in Urdu style
 export function formatDate(date: Date, timeZone = "Asia/Karachi"): string {
   try {
-    const zonedDate = utcToZonedTime(date, timeZone)
+    const zonedDate = toZonedTime(date, timeZone)
 
     const options: Intl.DateTimeFormatOptions = {
       weekday: "long",
@@ -23,7 +22,7 @@ export function formatDate(date: Date, timeZone = "Asia/Karachi"): string {
 // Format time in Urdu style
 export function formatTime(date: Date, timeZone = "Asia/Karachi"): string {
   try {
-    const zonedDate = utcToZonedTime(date, timeZone)
+    const zonedDate = toZonedTime(date, timeZone)
 
     const options: Intl.DateTimeFormatOptions = {
       hour: "numeric",
@@ -42,7 +41,7 @@ export function formatTime(date: Date, timeZone = "Asia/Karachi"): string {
 export function getCurrentDateTime(timeZone = "Asia/Karachi"): Date {
   try {
     const now = new Date()
-    return utcToZonedTime(now, timeZone)
+    return toZonedTime(now, timeZone)
   } catch (error) {
     console.error("Error getting current date-time:", error)
     return new Date()
@@ -57,7 +56,7 @@ export function parseDateTime(dateTimeString: string, timeZone = "Asia/Karachi")
     const date = parseISO(dateTimeString)
     if (!isValid(date)) return new Date()
 
-    return utcToZonedTime(date, timeZone)
+    return toZonedTime(date, timeZone)
   } catch (error) {
     console.error("Error parsing date-time:", error)
     return new Date()
@@ -67,7 +66,7 @@ export function parseDateTime(dateTimeString: string, timeZone = "Asia/Karachi")
 // Convert a local date to UTC ISO string with timezone
 export function formatToISOString(date: Date, timeZone = "Asia/Karachi"): string {
   try {
-    const utcDate = zonedTimeToUtc(date, timeZone)
+    const utcDate = fromZonedTime(date, timeZone)
     return utcDate.toISOString()
   } catch (error) {
     console.error("Error formatting to ISO string:", error)
@@ -78,7 +77,7 @@ export function formatToISOString(date: Date, timeZone = "Asia/Karachi"): string
 // Get relative date based on Urdu phrases
 export function getRelativeDate(phrase: string, baseDate: Date = new Date(), timeZone = "Asia/Karachi"): Date {
   try {
-    const zonedDate = utcToZonedTime(baseDate, timeZone)
+    const zonedDate = toZonedTime(baseDate, timeZone)
 
     // Common Urdu time phrases
     if (phrase.includes("آج") || phrase.includes("اج")) {
@@ -103,8 +102,8 @@ export function getRelativeDate(phrase: string, baseDate: Date = new Date(), tim
 // Format date range for display
 export function formatDateRange(startDate: Date, endDate: Date, timeZone = "Asia/Karachi"): string {
   try {
-    const start = utcToZonedTime(startDate, timeZone)
-    const end = utcToZonedTime(endDate, timeZone)
+    const start = toZonedTime(startDate, timeZone)
+    const end = toZonedTime(endDate, timeZone)
 
     // If same day, just show times
     if (start.toDateString() === end.toDateString()) {
