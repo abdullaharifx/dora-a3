@@ -150,6 +150,11 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [OpenAI Whisper](https://openai.com/research/whisper) - Speech recognition
 - [Web Speech API](https://developer.mozilla.org/en-US/docs/Web/API/Web_Speech_API) - Voice recording
 
+## Contributors
+- [Ibtehaj Ali](https://github.com/Ibtehaj778/)
+- [Tahmooras Khan](https://www.linkedin.com/in/tahmooras-khan-8341452a1/)
+- [Kabir ud Din Shahab]([https://developers.google.com/calend](https://www.linkedin.com/in/kabir-ud-din-shahab-230469262/))
+
 ---
 
 <div align="center">
