@@ -1,106 +1,118 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import type { User } from "next-auth"
-import VoiceRecorder from "./voice-recorder"
-import TranscriptionDisplay from "./transcription-display"
-import EventCard from "./event-card"
-import TimeZoneSelector from "./timezone-selector"
-import CalendarView from "./calendar-view"
-import DateTest from "./date-test"
-import DebugInfo from "./debug-info"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { useToast } from "@/components/ui/use-toast"
-import { transcribeAudio } from "@/lib/transcribe"
-import { extractEvent } from "@/lib/extract-event"
-import { scheduleEvent, deleteEvent } from "@/lib/schedule-event"
-import { CalendarPlus, Loader2, Trash2, Edit, Check, X, Calendar, AlertTriangle } from "lucide-react"
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { isDateInFuture, adjustEventDatesToFuture } from "@/lib/date-utils"
+import { useState, useEffect } from "react";
+import type { User } from "next-auth";
+import VoiceRecorder from "./voice-recorder";
+import TranscriptionDisplay from "./transcription-display";
+import EventCard from "./event-card";
+import TimeZoneSelector from "./timezone-selector";
+import CalendarView from "./calendar-view";
+import ChatBot from "./ChatBot";
+import DebugInfo from "./debug-info";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useToast } from "@/components/ui/use-toast";
+import { transcribeAudio } from "@/lib/transcribe";
+import { extractEvent } from "@/lib/extract-event";
+import { scheduleEvent, deleteEvent } from "@/lib/schedule-event";
+import { CalendarPlus, Loader2, Trash2, Edit, Check, X, Calendar, AlertTriangle, MessageSquare } from "lucide-react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { isDateInFuture, adjustEventDatesToFuture } from "@/lib/date-utils";
 
 interface VoiceSchedulerProps {
-  user: User
+  user: User;
 }
 
 interface EventItem {
-  id: string
-  data: any
-  transcription: string
-  isScheduled: boolean
-  calendarEventId?: string
-  isEditing?: boolean
-  needsAdjustment?: boolean
+  id: string;
+  data: any;
+  transcription: string;
+  isScheduled: boolean;
+  calendarEventId?: string;
+  isEditing?: boolean;
+  needsAdjustment?: boolean;
 }
 
 export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
-  const [activeTab, setActiveTab] = useState<"record" | "calendar" | "test">("record")
-  const [audioBlob, setAudioBlob] = useState<Blob | null>(null)
-  const [transcription, setTranscription] = useState<string>("")
-  const [isTranscribing, setIsTranscribing] = useState(false)
-  const [isExtracting, setIsExtracting] = useState(false)
-  const [isScheduling, setIsScheduling] = useState(false)
-  const [events, setEvents] = useState<EventItem[]>([])
-  const [timeZone, setTimeZone] = useState<string>("Asia/Karachi")
-  const { toast } = useToast()
+  const [activeTab, setActiveTab] = useState<"record" | "calendar" | "chat">("record");
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [transcription, setTranscription] = useState<string>("");
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [timeZone, setTimeZone] = useState<string>("Asia/Karachi");
+  const { toast } = useToast();
 
   // Try to detect user's timezone on component mount
   useEffect(() => {
     try {
-      const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+      const detectedTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
       if (detectedTimeZone) {
-        setTimeZone(detectedTimeZone)
+        setTimeZone(detectedTimeZone);
       }
     } catch (error) {
-      console.error("Error detecting timezone:", error)
+      console.error("Error detecting timezone:", error);
     }
-  }, [])
+  }, []);
 
   const handleRecordingComplete = async (blob: Blob) => {
-    setAudioBlob(blob)
-    await processAudio(blob)
-  }
+    setAudioBlob(blob);
+    await processAudio(blob);
+  };
 
   const processAudio = async (blob: Blob) => {
-    // Step 1: Transcribe audio
-    setIsTranscribing(true)
+    setIsTranscribing(true);
     try {
-      const transcriptionResult = await transcribeAudio(blob)
-      setTranscription(transcriptionResult.text)
+      // Log audio blob details
+      console.log("Debug - Audio Blob:", {
+        size: blob.size,
+        type: blob.type,
+        duration: blob.size > 0 ? "unknown" : "empty",
+      });
 
-      // Step 2: Extract event data
-      setIsExtracting(true)
+      // Transcribe audio and save to Pinecone
+      const result = await transcribeAudio(blob, true);
+      console.log("Debug - TranscribeAudio Result:", result);
 
-      // Get the current date in a more explicit format
-      const now = new Date()
-      const currentDateTime = now.toISOString()
+      const transcription = result?.transcription;
+      if (!transcription || transcription.trim() === "") {
+        console.error("Debug - Empty or invalid transcription:", transcription);
+        toast({
+          title: "ٹرانسکریپشن ناکام",
+          description: "آواز سے کوئی متن نہیں مل سکا۔ براہ کرم واضح طور پر اردو میں بولیں اور دوبارہ کوشش کریں۔",
+          variant: "destructive",
+        });
+        return;
+      }
 
-      const extractedEvent = await extractEvent(transcriptionResult.text, currentDateTime, timeZone)
+      setTranscription(transcription);
 
-      // Check if the event is in the future
-      const startDate = new Date(extractedEvent.start.dateTime)
-      const needsAdjustment = !isDateInFuture(startDate)
+      setIsExtracting(true);
+      const now = new Date();
+      const currentDateTime = now.toISOString();
 
-      // If the event was adjusted, we'll show a warning
-      const wasAdjusted = needsAdjustment && isDateInFuture(startDate)
+      const extractedEvent = await extractEvent(transcription, currentDateTime, timeZone);
 
-      // Add to events list
-      const newEventId = `event-${Date.now()}`
+      const startDate = new Date(extractedEvent.start.dateTime);
+      const needsAdjustment = !isDateInFuture(startDate);
+      const wasAdjusted = needsAdjustment && isDateInFuture(startDate);
+
+      const newEventId = `event-${Date.now()}`;
       setEvents((prev) => [
         ...prev,
         {
           id: newEventId,
           data: extractedEvent,
-          transcription: transcriptionResult.text,
+          transcription: transcription,
           isScheduled: false,
           needsAdjustment: wasAdjusted,
         },
-      ])
+      ]);
 
-      // Reset current transcription
-      setTranscription("")
-      setAudioBlob(null)
+      setTranscription("");
+      setAudioBlob(null);
 
       toast({
         title: "ایونٹ کی معلومات نکال لی گئیں",
@@ -108,307 +120,280 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
           ? "ایونٹ کی تاریخ ماضی میں تھی، اسے مستقبل میں منتقل کر دیا گیا ہے۔"
           : "آپ کے ایونٹ کی تفصیلات کو کامیابی سے نکال لیا گیا ہے۔",
         variant: wasAdjusted ? "warning" : "default",
-      })
-    } catch (error) {
-      console.error("Error processing audio:", error)
+      });
+    } catch (error: any) {
+      console.error("Error processing audio:", error);
       toast({
         title: "پروسیسنگ میں خرابی",
-        description: "آڈیو کو پروسیس کرنے میں خرابی ہوئی ہے۔ براہ کرم دوبارہ کوشش کریں۔",
+        description: error.message || "آڈیو کو پروسیس کرنے میں خرابی ہوئی ہے۔ براہ کرم دوبارہ کوشش کریں۔",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsTranscribing(false)
-      setIsExtracting(false)
+      setIsTranscribing(false);
+      setIsExtracting(false);
     }
-  }
+  };
 
   const validateEventBeforeScheduling = (eventData: any) => {
-    // Check if the event start time is in the future
-    const startDate = new Date(eventData.start.dateTime)
-
-    // Check if the date is in October 2023
+    const startDate = new Date(eventData.start.dateTime);
     if (startDate.getFullYear() === 2023 && startDate.getMonth() === 9) {
-      // October is month 9 in JS
-      const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrow.setHours(9, 0, 0, 0)
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
 
-      const oneHourLater = new Date(tomorrow)
-      oneHourLater.setHours(10, 0, 0, 0)
+      const oneHourLater = new Date(tomorrow);
+      oneHourLater.setHours(10, 0, 0, 0);
 
       const adjustedEvent = {
         ...eventData,
-        start: {
-          ...eventData.start,
-          dateTime: tomorrow.toISOString(),
-        },
-        end: {
-          ...eventData.end,
-          dateTime: oneHourLater.toISOString(),
-        },
-      }
+        start: { ...eventData.start, dateTime: tomorrow.toISOString() },
+        end: { ...eventData.end, dateTime: oneHourLater.toISOString() },
+      };
 
       toast({
         title: "ایونٹ کی تاریخ ایڈجسٹ کی گئی",
         description: "ایونٹ کی تاریخ 2023 میں تھی، اسے کل کی تاریخ میں منتقل کر دیا گیا ہے۔",
         variant: "warning",
-      })
+      });
 
-      return adjustedEvent
+      return adjustedEvent;
     }
 
     if (!isDateInFuture(startDate)) {
-      // Adjust the event to be in the future
-      const adjustedEvent = adjustEventDatesToFuture(eventData)
+      const adjustedEvent = adjustEventDatesToFuture(eventData);
 
       toast({
         title: "ایونٹ کی تاریخ ایڈجسٹ کی گئی",
         description: "ایونٹ کی تاریخ ماضی میں تھی، اسے مستقبل میں منتقل کر دیا گیا ہے۔",
         variant: "warning",
-      })
+      });
 
-      return adjustedEvent
+      return adjustedEvent;
     }
 
-    return eventData
-  }
+    return eventData;
+  };
 
   const handleScheduleEvent = async (eventId: string) => {
-    const eventToSchedule = events.find((e) => e.id === eventId)
-    if (!eventToSchedule) return
+    const eventToSchedule = events.find((e) => e.id === eventId);
+    if (!eventToSchedule) return;
 
-    // Validate and potentially adjust the event
-    const validatedEventData = validateEventBeforeScheduling(eventToSchedule.data)
+    const validatedEventData = validateEventBeforeScheduling(eventToSchedule.data);
 
-    // Update the event data if it was adjusted
     if (validatedEventData !== eventToSchedule.data) {
       setEvents((prev) =>
         prev.map((e) => (e.id === eventId ? { ...e, data: validatedEventData, needsAdjustment: true } : e)),
-      )
+      );
     }
 
-    setIsScheduling(true)
+    setIsScheduling(true);
     try {
-      const result = await scheduleEvent(validatedEventData)
+      const result = await scheduleEvent(validatedEventData);
 
-      // Update event with scheduled status and calendar ID
       setEvents((prev) =>
         prev.map((e) => (e.id === eventId ? { ...e, isScheduled: true, calendarEventId: result.id } : e)),
-      )
+      );
 
       toast({
         title: "ایونٹ شیڈول ہو گیا",
         description: "آپ کا ایونٹ کامیابی سے گوگل کیلنڈر میں شامل کر دیا گیا ہے۔",
-      })
+      });
 
-      // Switch to calendar view to see the new event
-      setActiveTab("calendar")
+      setActiveTab("calendar");
     } catch (error) {
-      console.error("Error scheduling event:", error)
+      console.error("Error scheduling event:", error);
       toast({
         title: "شیڈولنگ میں خرابی",
         description: "ایونٹ کو شیڈول کرنے میں خرابی ہوئی ہے۔ براہ کرم دوبارہ کوشش کریں۔",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsScheduling(false)
+      setIsScheduling(false);
     }
-  }
+  };
 
   const handleScheduleAll = async () => {
-    setIsScheduling(true)
-    const unscheduledEvents = events.filter((e) => !e.isScheduled)
+    setIsScheduling(true);
+    const unscheduledEvents = events.filter((e) => !e.isScheduled);
 
     if (unscheduledEvents.length === 0) {
       toast({
         title: "کوئی ایونٹ نہیں",
         description: "شیڈول کرنے کے لیے کوئی ایونٹ نہیں ہے۔",
-      })
-      setIsScheduling(false)
-      return
+      });
+      setIsScheduling(false);
+      return;
     }
 
     try {
-      let successCount = 0
-      let failCount = 0
-      let adjustedCount = 0
+      let successCount = 0;
+      let failCount = 0;
+      let adjustedCount = 0;
 
       for (const event of unscheduledEvents) {
         try {
-          // Validate and potentially adjust the event
-          const validatedEventData = validateEventBeforeScheduling(event.data)
-
-          // Check if the event was adjusted
-          const wasAdjusted = validatedEventData !== event.data
+          const validatedEventData = validateEventBeforeScheduling(event.data);
+          const wasAdjusted = validatedEventData !== event.data;
           if (wasAdjusted) {
-            adjustedCount++
-            // Update the event data in state
+            adjustedCount++;
             setEvents((prev) =>
               prev.map((e) => (e.id === event.id ? { ...e, data: validatedEventData, needsAdjustment: true } : e)),
-            )
+            );
           }
 
-          const result = await scheduleEvent(validatedEventData)
+          const result = await scheduleEvent(validatedEventData);
 
-          // Update event with scheduled status
           setEvents((prev) =>
             prev.map((e) => (e.id === event.id ? { ...e, isScheduled: true, calendarEventId: result.id } : e)),
-          )
-          successCount++
+          );
+          successCount++;
         } catch (error) {
-          console.error(`Error scheduling event ${event.id}:`, error)
-          failCount++
+          console.error(`Error scheduling event ${event.id}:`, error);
+          failCount++;
         }
       }
 
-      let message = `${successCount} ایونٹس کامیابی سے شیڈول ہو گئے۔`
+      let message = `${successCount} ایونٹس کامیابی سے شیڈول ہو گئے۔`;
       if (adjustedCount > 0) {
-        message += ` ${adjustedCount} ایونٹس کی تاریخ ایڈجسٹ کی گئی۔`
+        message += ` ${adjustedCount} ایونٹس کی تاریخ ایڈجسٹ کی گئی۔`;
       }
       if (failCount > 0) {
-        message += ` ${failCount} ایونٹس میں خرابی۔`
+        message += ` ${failCount} ایونٹس میں خرابی۔`;
       }
 
       toast({
         title: "ایونٹس شیڈول ہو گئے",
         description: message,
         variant: failCount > 0 ? "destructive" : adjustedCount > 0 ? "warning" : "default",
-      })
+      });
 
-      // Switch to calendar view to see the new events
       if (successCount > 0) {
-        setActiveTab("calendar")
+        setActiveTab("calendar");
       }
     } catch (error) {
-      console.error("Error in schedule all:", error)
+      console.error("Error in schedule all:", error);
       toast({
         title: "شیڈولنگ میں خرابی",
         description: "ایونٹس کو شیڈول کرنے میں خرابی ہوئی ہے۔",
         variant: "destructive",
-      })
+      });
     } finally {
-      setIsScheduling(false)
+      setIsScheduling(false);
     }
-  }
+  };
 
   const handleDeleteEvent = async (eventId: string) => {
-    const eventToDelete = events.find((e) => e.id === eventId)
-    if (!eventToDelete) return
+    const eventToDelete = events.find((e) => e.id === eventId);
+    if (!eventToDelete) return;
 
     if (eventToDelete.isScheduled && eventToDelete.calendarEventId) {
       try {
-        await deleteEvent(eventToDelete.calendarEventId)
+        await deleteEvent(eventToDelete.calendarEventId);
         toast({
           title: "ایونٹ حذف ہو گیا",
           description: "آپ کا ایونٹ کامیابی سے گوگل کیلنڈر سے حذف کر دیا گیا ہے۔",
-        })
+        });
       } catch (error) {
-        console.error("Error deleting event from calendar:", error)
+        console.error("Error deleting event from calendar:", error);
         toast({
           title: "حذف کرنے میں خرابی",
           description: "ایونٹ کو کیلنڈر سے حذف کرنے میں خرابی ہوئی ہے۔",
           variant: "destructive",
-        })
-        return
+        });
+        return;
       }
     }
 
-    // Remove from local state
-    setEvents((prev) => prev.filter((e) => e.id !== eventId))
-  }
+    setEvents((prev) => prev.filter((e) => e.id !== eventId));
+  };
 
   const toggleEditMode = (eventId: string) => {
-    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, isEditing: !e.isEditing } : e)))
-  }
+    setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, isEditing: !e.isEditing } : e)));
+  };
 
   const updateEventData = (eventId: string, newData: any) => {
-    // Check if the date is in October 2023
-    const startDate = new Date(newData.start.dateTime)
+    const startDate = new Date(newData.start.dateTime);
     if (startDate.getFullYear() === 2023 && startDate.getMonth() === 9) {
-      // October is month 9 in JS
-      const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrow.setHours(9, 0, 0, 0)
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
 
-      const oneHourLater = new Date(tomorrow)
-      oneHourLater.setHours(10, 0, 0, 0)
+      const oneHourLater = new Date(tomorrow);
+      oneHourLater.setHours(10, 0, 0, 0);
 
       newData = {
         ...newData,
-        start: {
-          ...newData.start,
-          dateTime: tomorrow.toISOString(),
-        },
-        end: {
-          ...newData.end,
-          dateTime: oneHourLater.toISOString(),
-        },
-      }
+        start: { ...newData.start, dateTime: tomorrow.toISOString() },
+        end: { ...newData.end, dateTime: oneHourLater.toISOString() },
+      };
 
       toast({
         title: "ایونٹ کی تاریخ ایڈجسٹ کی گئی",
         description: "ایونٹ کی تاریخ 2023 میں تھی، اسے کل کی تاریخ میں منتقل کر دیا گیا ہے۔",
         variant: "warning",
-      })
+      });
     }
 
-    // Validate that the updated event is in the future
-    const needsAdjustment = !isDateInFuture(startDate)
+    const needsAdjustment = !isDateInFuture(startDate);
 
     if (needsAdjustment) {
-      // Adjust the event to be in the future
-      newData = adjustEventDatesToFuture(newData)
+      newData = adjustEventDatesToFuture(newData);
 
       toast({
         title: "ایونٹ کی تاریخ ایڈجسٹ کی گئی",
         description: "ایونٹ کی تاریخ ماضی میں تھی، اسے مستقبل میں منتقل کر دیا گیا ہے۔",
         variant: "warning",
-      })
+      });
     }
 
     setEvents((prev) =>
       prev.map((e) => (e.id === eventId ? { ...e, data: newData, needsAdjustment: needsAdjustment } : e)),
-    )
-  }
+    );
+  };
 
   const resetAll = () => {
-    setAudioBlob(null)
-    setTranscription("")
-    setEvents([])
-  }
+    setAudioBlob(null);
+    setTranscription("");
+    setEvents([]);
+  };
 
   return (
     <div className="space-y-6">
-      <Card>
+      <Card className="bg-gray-800 text-white">
         <CardHeader>
           <CardTitle>اردو وائس شیڈیولر</CardTitle>
-          <CardDescription>اپنے ایونٹس کو اردو میں بول کر شیڈول کریں</CardDescription>
+          <CardDescription className="text-gray-300">
+            اپنے ایونٹس کو اردو میں بول کر شیڈول کریں یا چیٹ بوٹ سے اردو میں آواز یا متن کے ذریعے بات کریں
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="mb-6">
             <TimeZoneSelector value={timeZone} onChange={setTimeZone} />
           </div>
 
-          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "record" | "calendar" | "test")}>
-            <TabsList className="grid grid-cols-3 mb-4">
-              <TabsTrigger value="record">
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as "record" | "calendar" | "chat")}>
+            <TabsList className="grid grid-cols-3 mb-4 bg-gray-700">
+              <TabsTrigger value="record" className="text-gray-300">
                 <Loader2 className="h-4 w-4 ml-2 rtl:mr-2" />
                 ریکارڈنگ
               </TabsTrigger>
-              <TabsTrigger value="calendar">
+              <TabsTrigger value="calendar" className="text-gray-300">
                 <Calendar className="h-4 w-4 ml-2 rtl:mr-2" />
                 کیلنڈر
               </TabsTrigger>
-              <TabsTrigger value="test">تاریخ ٹیسٹ</TabsTrigger>
+              <TabsTrigger value="chat" className="text-gray-300">
+                <MessageSquare className="h-4 w-4 ml-2 rtl:mr-2" />
+                چیٹ
+              </TabsTrigger>
             </TabsList>
 
             <TabsContent value="record">
               <VoiceRecorder onRecordingComplete={handleRecordingComplete} />
 
               {isTranscribing && (
-                <div className="flex justify-center items-center py-4">
+                <div className="flex justify-center items-center py-4 text-gray-300">
                   <Loader2 className="h-6 w-6 animate-spin ml-2 rtl:mr-2" />
                   <span>آڈیو کو ٹرانسکرائب کیا جا رہا ہے...</span>
                 </div>
@@ -419,12 +404,13 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
               {events.length > 0 && (
                 <div className="mt-8 space-y-6">
                   <div className="flex justify-between items-center">
-                    <h3 className="text-xl font-medium">ایونٹس کی فہرست ({events.length})</h3>
+                    <h3 className="text-xl font-medium text-white">ایونٹس کی فہرست ({events.length})</h3>
                     <div className="space-x-2 rtl:space-x-reverse">
                       <Button
                         onClick={handleScheduleAll}
                         disabled={isScheduling || events.every((e) => e.isScheduled)}
                         variant="default"
+                        className="bg-blue-600 hover:bg-blue-700"
                       >
                         {isScheduling ? <Loader2 className="h-4 w-4 animate-spin ml-2 rtl:mr-2" /> : null}
                         تمام شیڈول کریں
@@ -434,16 +420,16 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
 
                   <div className="space-y-4">
                     {events.map((event) => (
-                      <div key={event.id} className="border rounded-lg p-4">
+                      <div key={event.id} className="border border-gray-600 rounded-lg p-4 bg-gray-700">
                         <div className="mb-2">
-                          <p className="text-sm text-muted-foreground">ٹرانسکرپشن: {event.transcription}</p>
+                          <p className="text-sm text-gray-300">ٹرانسکرپشن: {event.transcription}</p>
                         </div>
 
                         {event.needsAdjustment && (
-                          <Alert className="mb-4 bg-yellow-50 border-yellow-200">
-                            <AlertTriangle className="h-4 w-4 text-yellow-600" />
-                            <AlertTitle className="text-yellow-600">ایونٹ کی تاریخ ایڈجسٹ کی گئی</AlertTitle>
-                            <AlertDescription className="text-yellow-700">
+                          <Alert className="mb-4 bg-yellow-900 border-yellow-700 text-yellow-200">
+                            <AlertTriangle className="h-4 w-4 text-yellow-200" />
+                            <AlertTitle className="text-yellow-200">ایونٹ کی تاریخ ایڈجسٹ کی گئی</AlertTitle>
+                            <AlertDescription className="text-yellow-300">
                               ایونٹ کی تاریخ ماضی میں تھی، اسے مستقبل میں منتقل کر دیا گیا ہے۔
                             </AlertDescription>
                           </Alert>
@@ -459,7 +445,12 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
 
                         <div className="flex justify-end mt-4 space-x-2 rtl:space-x-reverse">
                           {!event.isScheduled && !event.isEditing && (
-                            <Button onClick={() => toggleEditMode(event.id)} variant="outline" size="sm">
+                            <Button
+                              onClick={() => toggleEditMode(event.id)}
+                              variant="outline"
+                              size="sm"
+                              className="bg-gray-600 text-white border-gray-500"
+                            >
                               <Edit className="h-4 w-4 ml-2 rtl:mr-2" />
                               ترمیم کریں
                             </Button>
@@ -467,12 +458,21 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
 
                           {event.isEditing && (
                             <>
-                              <Button onClick={() => toggleEditMode(event.id)} variant="outline" size="sm">
+                              <Button
+                                onClick={() => toggleEditMode(event.id)}
+                                variant="outline"
+                                size="sm"
+                                className="bg-gray-600 text-white border-gray-500"
+                              >
                                 <Check className="h-4 w-4 ml-2 rtl:mr-2" />
                                 محفوظ کریں
                               </Button>
-
-                              <Button onClick={() => toggleEditMode(event.id)} variant="ghost" size="sm">
+                              <Button
+                                onClick={() => toggleEditMode(event.id)}
+                                variant="ghost"
+                                size="sm"
+                                className="text-gray-300"
+                              >
                                 <X className="h-4 w-4 ml-2 rtl:mr-2" />
                                 منسوخ کریں
                               </Button>
@@ -480,7 +480,12 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
                           )}
 
                           {!event.isScheduled && !event.isEditing && (
-                            <Button onClick={() => handleScheduleEvent(event.id)} disabled={isScheduling} size="sm">
+                            <Button
+                              onClick={() => handleScheduleEvent(event.id)}
+                              disabled={isScheduling}
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700"
+                            >
                               {isScheduling ? (
                                 <Loader2 className="h-4 w-4 animate-spin ml-2 rtl:mr-2" />
                               ) : (
@@ -490,17 +495,24 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
                             </Button>
                           )}
 
-                          <Button onClick={() => handleDeleteEvent(event.id)} variant="destructive" size="sm">
+                          <Button
+                            onClick={() => handleDeleteEvent(event.id)}
+                            variant="destructive"
+                            size="sm"
+                            className="bg-red-600 hover:bg-red-700"
+                          >
                             <Trash2 className="h-4 w-4 ml-2 rtl:mr-2" />
                             حذف کریں
                           </Button>
                         </div>
 
                         {event.isScheduled && (
-                          <Alert className="mt-2 bg-green-50">
+                          <Alert className="mt-2 bg-green-900 text-green-200">
                             <Check className="h-4 w-4" />
                             <AlertTitle>شیڈول ہو گیا</AlertTitle>
-                            <AlertDescription>یہ ایونٹ آپ کے گوگل کیلنڈر میں شامل کر دیا گیا ہے۔</AlertDescription>
+                            <AlertDescription>
+                              یہ ایونٹ آپ کے گوگل کیلنڈر میں شامل کر دیا گیا ہے۔
+                            </AlertDescription>
                           </Alert>
                         )}
                       </div>
@@ -509,7 +521,11 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
 
                   {events.length > 0 && (
                     <div className="flex justify-center mt-6">
-                      <Button variant="outline" onClick={resetAll}>
+                      <Button
+                        variant="outline"
+                        onClick={resetAll}
+                        className="bg-gray-600 text-white border-gray-500"
+                      >
                         سب کچھ صاف کریں
                       </Button>
                     </div>
@@ -524,12 +540,22 @@ export default function VoiceScheduler({ user }: VoiceSchedulerProps) {
               <CalendarView timeZone={timeZone} />
             </TabsContent>
 
-            <TabsContent value="test">
-              <DateTest />
+            <TabsContent value="chat">
+              <Card className="bg-gray-800 text-white">
+                <CardHeader>
+                  <CardTitle>چیٹ بوٹ</CardTitle>
+                  <CardDescription className="text-gray-300">
+                    اردو میں چیٹ بوٹ سے بات کریں یا اردو آواز کے ذریعے پیغام بھیجیں
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ChatBot />
+                </CardContent>
+              </Card>
             </TabsContent>
           </Tabs>
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

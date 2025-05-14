@@ -1,19 +1,33 @@
-"use server"
+// lib/extract-event.ts
+"use server";
 
-import { generateText } from "ai"
-import { openai } from "@ai-sdk/openai"
-import { adjustEventDatesToFuture } from "./date-utils"
-import { format } from "date-fns"
+import { generateText } from "ai";
+import { openai } from "@ai-sdk/openai";
+import { adjustEventDatesToFuture } from "./date-utils";
+import { format } from "date-fns";
 
 export async function extractEvent(transcription: string, currentDateTime: string, timeZone: string) {
   try {
-    // Get the current date in a more explicit format
-    const now = new Date()
-    const formattedDate = format(now, "yyyy-MM-dd")
-    const formattedTime = format(now, "HH:mm:ss")
-    const tomorrow = new Date(now)
-    tomorrow.setDate(tomorrow.getDate() + 1)
-    const formattedTomorrow = format(tomorrow, "yyyy-MM-dd")
+    // Enhanced validation
+    if (!transcription || typeof transcription !== "string" || transcription.trim() === "") {
+      const error = new Error("Invalid or empty transcription provided");
+      console.error("Debug - Invalid Transcription:", {
+        transcription,
+        currentDateTime,
+        timeZone,
+        stack: error.stack,
+      });
+      throw error;
+    }
+
+    console.log("Debug - Transcription Input:", transcription);
+
+    const now = new Date();
+    const formattedDate = format(now, "yyyy-MM-dd");
+    const formattedTime = format(now, "HH:mm:ss");
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const formattedTomorrow = format(tomorrow, "yyyy-MM-dd");
 
     const { text } = await generateText({
       model: openai("gpt-4o"),
@@ -44,37 +58,37 @@ export async function extractEvent(transcription: string, currentDateTime: strin
       If no specific time is mentioned, use 9:00 AM as default start time and 10:00 AM as end time.
       
       Pay special attention to relative time phrases in Urdu like "کل" (tomorrow), "پرسوں" (day after tomorrow), 
-      "اگلے ہفتے" (next week), "اگلے مہینے" (next month), etc. and interpret them correctly relative to the current date.
+      "اگلے ہفتے" (next week), "اگلے مہينے" (next month), etc. and interpret them correctly relative to the current date.
       
       Return ONLY the JSON object without any explanations or markdown.`,
       prompt: transcription,
-    })
+    });
 
-    // Parse the JSON response
-    const extractedEvent = JSON.parse(text)
+    console.log("Debug - generateText Output:", text);
 
-    // Double-check that the event is in the future and adjust if needed
-    const adjustedEvent = adjustEventDatesToFuture(extractedEvent)
+    const extractedEvent = JSON.parse(text);
 
-    // Force override any dates that might still be in October 2023
-    const startDate = new Date(adjustedEvent.start.dateTime)
+    const adjustedEvent = adjustEventDatesToFuture(extractedEvent);
+
+    const startDate = new Date(adjustedEvent.start.dateTime);
     if (startDate.getFullYear() === 2023 && startDate.getMonth() === 9) {
-      // October is month 9 in JS
-      const now = new Date()
-      const tomorrow = new Date(now)
-      tomorrow.setDate(tomorrow.getDate() + 1)
-      tomorrow.setHours(9, 0, 0, 0)
+      const now = new Date();
+      const tomorrow = new Date(now);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      tomorrow.setHours(9, 0, 0, 0);
 
-      const oneHourLater = new Date(tomorrow)
-      oneHourLater.setHours(10, 0, 0, 0)
+      const oneHourLater = new Date(tomorrow);
+      oneHourLater.setHours(10, 0, 0, 0);
 
-      adjustedEvent.start.dateTime = tomorrow.toISOString()
-      adjustedEvent.end.dateTime = oneHourLater.toISOString()
+      adjustedEvent.start.dateTime = tomorrow.toISOString();
+      adjustedEvent.end.dateTime = oneHourLater.toISOString();
     }
 
-    return adjustedEvent
+    console.log("Debug - Adjusted Event Output:", JSON.stringify(adjustedEvent, null, 2));
+
+    return adjustedEvent;
   } catch (error) {
-    console.error("Error extracting event:", error)
-    throw new Error("Failed to extract event details")
+    console.error("Error extracting event:", error);
+    throw new Error("Failed to extract event details");
   }
 }
